@@ -104,26 +104,26 @@ void getSensorValue(const Rest::Request& request, Http::ResponseWriter response)
 void getPositionValue (const Rest::Request& request, Http::ResponseWriter response) {
     auto object = request.param(":object").as<std::string>();
 
-    if(object.compare("window") != 0 && location.compare("curtain") != 0) {
+    if(object.compare("window") != 0 && object.compare("curtain") != 0) {
         response.send(Http::Code::Not_Found, "Location poate avea doar valorile window sau curtain.\n");
         return;
     }
 
     if(object.compare("window") == 0) {
         if(windowOpenness == 0) {
-            response.send(Http::Code::Ok, "close " + "0");
+            response.send(Http::Code::Ok, "close 0");
         }
         else{
-            response.send(Http::Code::Ok, "open " + windowOpenness.toString);
+            response.send(Http::Code::Ok, "open " + to_string(windowOpenness));
         }
     }
 
     if(object.compare("curtain") == 0) {
         if(curtainOpenness == 0) {
-            response.send(Http::Code::Ok, "close " + "0");
+            response.send(Http::Code::Ok, "close 0");
         }
         else{
-            response.send(Http::Code::Ok, "open " + windowOpenness.toString);
+            response.send(Http::Code::Ok, "open " + to_string(windowOpenness));
         }
     }
 }
@@ -224,6 +224,7 @@ int main() {
 
     // Rute pentru setarea si returnarea valorilor pozitiei ferestrei/perdelei
     router.get("/settings/get/:object", Routes::bind(getPositionValue));
+    // router.get("/settings/set/:option", Routes::bind(setPositionValue));
 
     Address addr(Ipv4::any(), Port(9080));
 
