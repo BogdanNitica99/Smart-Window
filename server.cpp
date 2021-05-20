@@ -64,6 +64,44 @@ void setSensorValue(const Rest::Request& request, Http::ResponseWriter response)
     response.send(Http::Code::Ok, "Sensor settings saved\n");
 }
 
+void setLocationValue(const Rest::Request& request, Http::ResponseWriter response) {
+    auto action = request.param(":action").as<std::string>();
+    auto object = request.param(":object").as<std::string>();
+    auto value = request.param(":value").as<std::string>();
+
+    if(action.compare("open") != 0 && action.compare("close") != 0) {
+        response.send(Http::Code::Not_Found, "Poti doar sa deschizi/inchizi fereastra.\n");
+        return;
+    }
+    if(object.compare("window") != 0 && object.compare("curtain") != 0) {
+        response.send(Http::Code::Not_Found, "Obiectul nu este fereasta/perdea.\n");
+        return;
+    }
+    if(!is_digits(value)) {
+        response.send(Http::Code::Not_Found, "Value poate fi doar un numar intreg.\n");
+        return;
+    }
+
+    if(object.compare("window") == 0) {
+        if(action.compare("open") == 0) {
+            windowOpenness += stoi(value);
+        }
+        if(action.compare("close") == 0) {
+            windowOpenness -= stoi(value);
+        }
+    }
+    if(object.compare("curtain") == 0) {
+        if(action.compare("open") == 0) {
+            windowOpenness += stoi(value);
+        }
+        if(action.compare("close") == 0) {
+            windowOpenness -= stoi(value);
+        }
+    }
+    
+    response.send(Http::Code::Ok, "Location settings saved\n");
+}
+
 void getSensorValue(const Rest::Request& request, Http::ResponseWriter response) {
     auto location = request.param(":location").as<std::string>();
     auto option = request.param(":option").as<std::string>();
@@ -194,6 +232,8 @@ int main() {
     // Rute pentru setarea si returnarea valorilor dorite in interiorul camerei
     router.get("/wantedValues/set/:option/:value", Routes::bind(setWantedValues));
     router.get("/wantedValues/get/:option", Routes::bind(getWantedValues));
+
+    router.get("/settings/set/:action/:object/:value", Routes::bind(setLocationValue));
 
     Address addr(Ipv4::any(), Port(9080));
 
