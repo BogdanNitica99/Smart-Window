@@ -7,8 +7,9 @@ using namespace std;
 using namespace Pistache;
 using namespace Pistache::Rest;
 
-int tempInside, tempOutside, humInside, humOutside, lightInside, lightOutside;
-int windowOpenness = 0, curtainOpenness = 100, wantedTemp = 19, wantedHumidity = 40, wantedLight = 7500;
+int tempInside, tempOutside, humInside, humOutside, lightInside, lightOutside, stressLevel;
+int windowOpenness = 0, curtainOpenness = 100, netOpenness = 0, wantedTemp = 19, wantedHumidity = 40, wantedLight = 7500;
+bool turnOnAlarm;
 
  void logActivity(string msg){
     string filename("log.txt");
@@ -40,7 +41,8 @@ void setSensorValue(const Rest::Request& request, Http::ResponseWriter response)
         response.send(Http::Code::Not_Found, "Location poate avea doar valorile outside sau inside.\n");
         return;
     }
-    if(option.compare("temperature") != 0 && option.compare("humidity") != 0 && option.compare("light") != 0) {
+    if(option.compare("temperature") != 0 && option.compare("humidity") != 0 && option.compare("light") != 0
+    && option.compare("alarm") != 0) {
         response.send(Http::Code::Not_Found, "Option poate avea doar valorile temperature, humidity sau light.\n");
         return;
     }
@@ -69,6 +71,9 @@ void setSensorValue(const Rest::Request& request, Http::ResponseWriter response)
         }
         if(option.compare("light") == 0) {
             lightOutside = stoi(value);
+        }
+        if(option.compare("alarm") == 0) {
+            stressLevel = stoi(value);
         }
     }
 
@@ -124,12 +129,14 @@ void setStateObject(const Rest::Request& request, Http::ResponseWriter response)
     auto object = request.param(":object").as<std::string>();
     auto value = request.param(":value").as<std::string>();
 
-    if(action.compare("open") != 0 && action.compare("close") != 0) {
-        response.send(Http::Code::Not_Found, "Poti doar sa deschizi/inchizi.\n");
+
+    if(action.compare("open") != 0 && action.compare("close") != 0 && action.compare("turn off") != 0) {
+        response.send(Http::Code::Not_Found, "Poti doar sa deschizi/inchizi fereastra/perdeaua/plasa sau sa opresti alarma.\n");
         return;
     }
-    if(object.compare("window") != 0 && object.compare("curtain") != 0) {
-        response.send(Http::Code::Not_Found, "Obiectul nu este fereasta/perdea.\n");
+    if(object.compare("window") != 0 && object.compare("curtain") != 0 && object.compare("net") != 0
+    && object.compare("alarm") != 0) {
+        response.send(Http::Code::Not_Found, "Obiectul nu este fereasta/perdea/plasa/alarma.\n");
         return;
     }
     if(!is_digits(value)) {
@@ -153,15 +160,32 @@ void setStateObject(const Rest::Request& request, Http::ResponseWriter response)
             windowOpenness -= stoi(value);
         }
     }
-    
+    if(object.compare("net") == 0) {
+        if(action.compare("open") == 0) {
+            netOpenness += stoi(value);
+        }
+        if(action.compare("close") == 0) {
+            netOpenness -= stoi(value);
+        }
+    }
+    if(object.compare("alarm") == 0) {
+        if(action.compare("turn off") == 0) {
+            if(stoi(value) == 0)
+                turnOnAlarm = false;
+            else{
+                response.send(Http::Code::Not_Found, "Value poate fi doar 0.\n");
+                return;
+            }
+        }
+    }
     response.send(Http::Code::Ok, "Object state settings saved\n");
 }
 
 void getStateObject(const Rest::Request& request, Http::ResponseWriter response) {
     auto object = request.param(":object").as<std::string>();
 
-    if(object.compare("window") != 0 && object.compare("curtain") != 0) {
-        response.send(Http::Code::Not_Found, "Obiectul poate avea doar valorile window sau curtain.\n");
+    if(object.compare("window") != 0 && object.compare("curtain") != 0 && object.compare("net") != 0) {
+        response.send(Http::Code::Not_Found, "Location poate avea doar valorile window, curtain sau net.\n");
         return;
     }
 
@@ -179,7 +203,16 @@ void getStateObject(const Rest::Request& request, Http::ResponseWriter response)
             response.send(Http::Code::Ok, "close");
         }
         else{
-            response.send(Http::Code::Ok, "open " + to_string(windowOpenness));
+            response.send(Http::Code::Ok, "open " + to_string(curtainOpenness));
+        }
+    }
+
+    if(object.compare("net") == 0) {
+        if(netOpenness == 0) {
+            response.send(Http::Code::Ok, "close");
+        }
+        else{
+            response.send(Http::Code::Ok, "open " + to_string(netOpenness));
         }
     }
 }
@@ -263,6 +296,10 @@ void giveCommand()
         windowOpenness = 100;
     if(curtainOpenness < 0)
         curtainOpenness = 0;
+
+    if(stressLevel > 5)
+        turnOnAlarm = true;
+
 }
 
 
