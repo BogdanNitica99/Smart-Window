@@ -2,6 +2,7 @@
 #include <pistache/endpoint.h>
 #include <pistache/router.h>
 #include <fstream>
+#include <mqtt/client.h>
 
 using namespace std;
 using namespace Pistache;
@@ -11,7 +12,7 @@ int tempInside, tempOutside, humInside, humOutside, lightInside, lightOutside, s
 int windowOpenness = 0, curtainOpenness = 100, netOpenness = 0, wantedTemp = 19, wantedHumidity = 40, wantedLight = 7500;
 bool turnOnAlarm;
 
- void logActivity(string msg){
+void logActivity(string msg){
     string filename("log.txt");
     ofstream file_out;
  
@@ -147,37 +148,59 @@ void setStateObject(const Rest::Request& request, Http::ResponseWriter response)
     if(object.compare("window") == 0) {
         if(action.compare("open") == 0) {
             windowOpenness += stoi(value);
+            logActivity("Ati deschisa fereastra cu " + value + " procente.\n");
         }
         if(action.compare("close") == 0) {
             windowOpenness -= stoi(value);
+            logActivity("Ati inchisa fereastra cu " + value + " procente.\n");
         }
     }
     if(object.compare("curtain") == 0) {
         if(action.compare("open") == 0) {
-            windowOpenness += stoi(value);
+            curtainOpenness += stoi(value);
+            logActivity("Ati deschisa perdeaua cu " + value + " procente.\n");
         }
         if(action.compare("close") == 0) {
-            windowOpenness -= stoi(value);
+            curtainOpenness -= stoi(value);
+            logActivity("Ati inchisa perdeaua cu " + value + " procente.\n");
         }
     }
     if(object.compare("net") == 0) {
         if(action.compare("open") == 0) {
             netOpenness += stoi(value);
+            logActivity("Ati deschisa plasa cu " + value + " procente.\n");
         }
         if(action.compare("close") == 0) {
             netOpenness -= stoi(value);
+            logActivity("Ati inchisa plasa cu " + value + " procente.\n");
         }
     }
     if(object.compare("alarm") == 0) {
         if(action.compare("turn off") == 0) {
-            if(stoi(value) == 0)
+            if(stoi(value) == 0){
                 turnOnAlarm = false;
+                logActivity("Ati oprit alarma.\n");
+            }
             else{
                 response.send(Http::Code::Not_Found, "Value poate fi doar 0.\n");
                 return;
             }
         }
     }
+
+    if(windowOpenness > 100)
+        windowOpenness = 100;
+    if(windowOpenness < 0)
+        windowOpenness = 0;
+    if(curtainOpenness > 100)
+        curtainOpenness = 100;
+    if(curtainOpenness < 0)
+        curtainOpenness = 0;
+    if(netOpenness > 100)
+        netOpenness = 100;
+    if(netOpenness < 0)
+        netOpenness = 0;
+
     response.send(Http::Code::Ok, "Object state settings saved\n");
 }
 
@@ -266,44 +289,95 @@ void getWantedValues(const Rest::Request& request, Http::ResponseWriter response
 
 void giveCommand()
 {
-    if((humInside < wantedHumidity) && (humOutside >= wantedHumidity))
+    if((humInside < wantedHumidity) && (humOutside >= wantedHumidity)){
         windowOpenness += 50;
-    if((humInside > wantedHumidity) && (humOutside <= wantedHumidity))
+        logActivity("A fost deschisa fereastra cu 50 de procente.\n");
+    }
+    if((humInside > wantedHumidity) && (humOutside <= wantedHumidity)){
         windowOpenness += 50;
- 
-    if((tempInside < wantedTemp) && (tempOutside >= wantedTemp))
+        logActivity("A fost deschisa fereastra cu 50 de procente.\n");
+    }
+    if((tempInside < wantedTemp) && (tempOutside >= wantedTemp)){
         windowOpenness += 50;
-    if((tempInside > wantedTemp) && (tempOutside <= wantedTemp))
+        logActivity("A fost deschisa fereastra cu 50 de procente.\n");
+    }
+    if((tempInside > wantedTemp) && (tempOutside <= wantedTemp)){
         windowOpenness += 50;
+        logActivity("A fost deschisa fereastra cu 50 de procente.\n");
+    }
 
 
-    if((humInside < wantedHumidity) && (humOutside < wantedHumidity))
+    if((humInside < wantedHumidity) && (humOutside < wantedHumidity)){
         windowOpenness = 0;
-    if((humInside > wantedHumidity) && (humOutside > wantedHumidity))
+        logActivity("A fost inchisa fereastra.\n");
+    }
+    if((humInside > wantedHumidity) && (humOutside > wantedHumidity)){
         windowOpenness = 0;
+        logActivity("A fost inchisa fereastra.\n");
+    }
 
-    if((tempInside < wantedTemp) && (tempOutside < wantedTemp))
+    if((tempInside < wantedTemp) && (tempOutside < wantedTemp)){
         windowOpenness = 0;
-    if((tempInside > wantedTemp) && (tempOutside > wantedTemp))
+        logActivity("A fost inchisa fereastra.\n");
+    }
+    if((tempInside > wantedTemp) && (tempOutside > wantedTemp)){
         windowOpenness = 0;
+        logActivity("A fost inchisa fereastra.\n");
+    }
 
-    if((lightInside < wantedLight) && (lightOutside >= wantedLight))
+    if((lightInside < wantedLight) && (lightOutside >= wantedLight)){
         curtainOpenness = 100;
-    if(lightInside > wantedLight)
+        logActivity("A fost deschisa perdeaua.\n");
+    }
+    if(lightInside > wantedLight){
         curtainOpenness -= 75;
-
+        logActivity("A fost inchisa perdeaua cu 75 de procente.\n");
+    }
     if(windowOpenness > 100)
         windowOpenness = 100;
     if(curtainOpenness < 0)
         curtainOpenness = 0;
 
-    if(stressLevel > 5)
+    if(stressLevel > 5){
         turnOnAlarm = true;
+        logActivity("A pornit alarma!\n");
+    }
 
 }
 
+void mqttExample() {
+    const std::string address = "localhost";
+    const std::string clientId = "window";
+
+    // Create a client
+    mqtt::client client(address, clientId);
+
+    mqtt::connect_options options;
+    options.set_keep_alive_interval(20);
+    options.set_clean_session(true);
+
+    try {
+        // Connect to the client
+        client.connect(options);
+
+        // Create a message
+        const std::string TOPIC = "window";
+        const std::string PAYLOAD = "Hello World!";
+        auto msg = mqtt::make_message(TOPIC, PAYLOAD);
+
+        // Publish it to the server
+        client.publish(msg);
+
+        // Disconnect
+        client.disconnect();
+    }
+    catch (const mqtt::exception& exc) {
+        std::cerr << exc.what() << " [" << exc.get_reason_code() << "]" << std::endl;
+    }
+}
 
 int main() {
+    mqttExample();
     Router router;
 
     // Ruta de test pentru libraria Pistache

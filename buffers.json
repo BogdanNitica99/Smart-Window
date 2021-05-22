@@ -1,0 +1,41 @@
+{
+    "device-name": "Window App",
+    "device-type": "Window",
+    "buffers-count": 2,
+    "input-buffers":{
+        "1":{
+            "token-delimitators": "",
+            "protocol": "HTTP",
+            "prefix": "curl -XPOST 'http://127.0.0.1:8080/'",
+            "buffer-tokens":[
+            {
+                "name":"App actions",
+                "description":"Parameters for opening/closing and turning off",
+                "token-type":"string", 
+                "byte-size":10, 
+                "regex-rule": "[a-zA-Z]*",
+                "optional": false
+            },
+            {
+                "name":"App objects",
+                "description": "Parameters representing which part of the window are the actions applied to.",
+                "token-type":"string",
+                "byte-size":10,
+                "regex-rule": "[a-zA-Z]*", 
+                "optional": false
+            },
+            {
+                "name":"App action parameter value",
+                "description": "Parameter value for the setting chosen",
+                "token-type":"string",
+                "byte-size":10,
+                "regex-rule": "[0-9]*",
+                "optional": false
+            }
+            ]
+        },
+        "2":{
+            
+        }
+    }
+}
