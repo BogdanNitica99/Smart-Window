@@ -1,4 +1,5 @@
 #include <string>
+#include <regex>
 #include <pistache/endpoint.h>
 #include <pistache/router.h>
 #include <fstream>
@@ -8,9 +9,9 @@ using namespace std;
 using namespace Pistache;
 using namespace Pistache::Rest;
 
-int tempInside, tempOutside, humInside, humOutside, lightInside, lightOutside, stressLevel;
-int windowOpenness = 0, curtainOpenness = 100, netOpenness = 0, wantedTemp = 19, wantedHumidity = 40, wantedLight = 7500;
-bool turnOnAlarm;
+int tempInside, tempOutside, humInside, humOutside, lightInside, lightOutside, stressLevel, curHour, curMinute;
+int windowOpenness = 0, curtainOpenness = 100, netOpenness = 0, wantedTemp = 19, wantedHumidity = 40, wantedLight = 7500, wantedHour, wantedMinute;
+bool turnOnSecurityAlarm, wakeUpAlarm;
 
 void logActivity(string msg){
     string filename("log.txt");
@@ -130,56 +131,64 @@ void setStateObject(const Rest::Request& request, Http::ResponseWriter response)
     auto object = request.param(":object").as<std::string>();
     auto value = request.param(":value").as<std::string>();
 
+    string msg;
+
 
     if(action.compare("open") != 0 && action.compare("close") != 0 && action.compare("turn off") != 0) {
-        response.send(Http::Code::Not_Found, "Poti doar sa deschizi/inchizi fereastra/perdeaua/plasa sau sa opresti alarma.\n");
+        msg = "Gresit! Poti doar sa deschizi/inchizi fereastra/perdeaua/plasa sau sa opresti alarma.\n";
+        logActivity(msg);
+        response.send(Http::Code::Not_Found, msg);
         return;
     }
     if(object.compare("window") != 0 && object.compare("curtain") != 0 && object.compare("net") != 0
     && object.compare("alarm") != 0) {
-        response.send(Http::Code::Not_Found, "Obiectul nu este fereasta/perdea/plasa/alarma.\n");
+        msg = "Gresit! Obiectul nu este fereasta/perdea/plasa/alarma.\n";
+        logActivity(msg);
+        response.send(Http::Code::Not_Found, msg);
         return;
     }
     if(!is_digits(value)) {
-        response.send(Http::Code::Not_Found, "Value poate fi doar un numar intreg.\n");
+        msg = "Gresit! Value poate fi doar un numar intreg.\n";
+        logActivity(msg);
+        response.send(Http::Code::Not_Found, msg);
         return;
     }
 
     if(object.compare("window") == 0) {
         if(action.compare("open") == 0) {
             windowOpenness += stoi(value);
-            logActivity("Ati deschisa fereastra cu " + value + " procente.\n");
+            msg = "Ok! Ati deschisa fereastra cu " + value + " procente.\n";
         }
         if(action.compare("close") == 0) {
             windowOpenness -= stoi(value);
-            logActivity("Ati inchisa fereastra cu " + value + " procente.\n");
+            msg = "Ok! Ati inchisa fereastra cu " + value + " procente.\n";
         }
     }
     if(object.compare("curtain") == 0) {
         if(action.compare("open") == 0) {
             curtainOpenness += stoi(value);
-            logActivity("Ati deschisa perdeaua cu " + value + " procente.\n");
+            msg = "Ok! Ati deschisa perdeaua cu " + value + " procente.\n";
         }
         if(action.compare("close") == 0) {
             curtainOpenness -= stoi(value);
-            logActivity("Ati inchisa perdeaua cu " + value + " procente.\n");
+            msg = "Ok! Ati inchisa perdeaua cu " + value + " procente.\n";
         }
     }
     if(object.compare("net") == 0) {
         if(action.compare("open") == 0) {
             netOpenness += stoi(value);
-            logActivity("Ati deschisa plasa cu " + value + " procente.\n");
+            msg = "Ok! Ati deschisa plasa cu " + value + " procente.\n";
         }
         if(action.compare("close") == 0) {
             netOpenness -= stoi(value);
-            logActivity("Ati inchisa plasa cu " + value + " procente.\n");
+            msg = "Ok! Ati inchisa plasa cu " + value + " procente.\n";
         }
     }
     if(object.compare("alarm") == 0) {
         if(action.compare("turn off") == 0) {
             if(stoi(value) == 0){
-                turnOnAlarm = false;
-                logActivity("Ati oprit alarma.\n");
+                turnOnSecurityAlarm = false;
+                msg = "Ok! Ati oprit alarma.\n";
             }
             else{
                 response.send(Http::Code::Not_Found, "Value poate fi doar 0.\n");
@@ -201,43 +210,51 @@ void setStateObject(const Rest::Request& request, Http::ResponseWriter response)
     if(netOpenness < 0)
         netOpenness = 0;
 
-    response.send(Http::Code::Ok, "Object state settings saved\n");
+    logActivity(msg);
+    response.send(Http::Code::Ok, msg);
 }
 
 void getStateObject(const Rest::Request& request, Http::ResponseWriter response) {
     auto object = request.param(":object").as<std::string>();
 
+    string msg;
+
     if(object.compare("window") != 0 && object.compare("curtain") != 0 && object.compare("net") != 0) {
-        response.send(Http::Code::Not_Found, "Location poate avea doar valorile window, curtain sau net.\n");
+        msg = "Gresit! Object poate avea doar valorile window, curtain sau net.\n";
+        logActivity(msg);
+        response.send(Http::Code::Not_Found, msg);
         return;
     }
 
     if(object.compare("window") == 0) {
         if(windowOpenness == 0) {
-            response.send(Http::Code::Ok, "close");
+            msg = object + " este inchis\n";
         }
         else{
-            response.send(Http::Code::Ok, "open " + to_string(windowOpenness));
+            msg = object + " este deschis " + to_string(windowOpenness) + "\n";
         }
     }
 
     if(object.compare("curtain") == 0) {
         if(curtainOpenness == 0) {
-            response.send(Http::Code::Ok, "close");
+            msg = object + " este inchis\n";
         }
         else{
-            response.send(Http::Code::Ok, "open " + to_string(curtainOpenness));
+            msg = object + " este deschis " + to_string(curtainOpenness) + "\n";
         }
     }
 
     if(object.compare("net") == 0) {
         if(netOpenness == 0) {
-            response.send(Http::Code::Ok, "close");
+            msg = object + " este inchis\n";
         }
         else{
-            response.send(Http::Code::Ok, "open " + to_string(netOpenness));
+            msg = object + " este deschis " + to_string(netOpenness) + "\n";
         }
     }
+
+    logActivity(msg);
+    response.send(Http::Code::Ok, msg);
 }
 
 // Setarea valorilor pentru geam
@@ -246,103 +263,147 @@ void setWantedValues(const Rest::Request& request, Http::ResponseWriter response
     auto option = request.param(":option").as<std::string>();
     auto value = request.param(":value").as<std::string>();
 
-    if(option.compare("temperature") != 0 && option.compare("humidity") != 0 && option.compare("light") != 0) {
-        response.send(Http::Code::Not_Found, "Option poate avea doar valorile temperature, humidity sau light.\n");
+    string msg;
+
+    regex reg_hours("([0-9]{2}):([0-9]{2})");
+
+    if(option.compare("temperature") != 0 && option.compare("humidity") != 0 && option.compare("light") != 0 && option.compare("alarm") != 0) {
+        msg = "Gresit! Option poate avea doar valorile temperature, humidity, light sau alarm.\n";
+        logActivity(msg);
+        response.send(Http::Code::Not_Found, msg);
         return;
     }
 
-    if(!is_digits(value)) {
-        response.send(Http::Code::Not_Found, "Value poate fi doar un numar intreg.\n");
+    if(is_digits(value)) {
+        if(option.compare("temperature") == 0) {
+            wantedTemp = stoi(value);
+            msg = "Temperatura dorita a fost setata la: " + value + ".\n";
+        }
+        if(option.compare("humidity") == 0) {
+            wantedHumidity = stoi(value);
+            msg = "Umiditatea dorita a fost setata la: " + value + ".\n";
+        }
+        if(option.compare("light") == 0) {
+            wantedLight = stoi(value);
+            msg = "Luminozitatea dorita a fost setata la: " + value + ".\n";
+        }
+    }
+    else if(regex_match(value, reg_hours) && option.compare("alarm") == 0){
+        wakeUpAlarm = true;
+        wantedHour = stoi(value.substr(0, 2));
+        wantedMinute = stoi(value.substr(3, 2));
+        msg = "Ora de alarma a fost setata la: " + value.substr(0, 2) + ":" + value.substr(3, 2) + ".\n";
+    }
+    else{
+        msg = "Gresit! Value poate fi doar valoare numerica, sau string de tipul HH:MM.\n";
+        logActivity(msg);
+        response.send(Http::Code::Not_Found, msg);
         return;
     }
 
-    if(option.compare("temperature") == 0) {
-        wantedTemp = stoi(value);
-    }
-    if(option.compare("humidity") == 0) {
-        wantedHumidity = stoi(value);
-    }
-    if(option.compare("light") == 0) {
-        wantedLight = stoi(value);
-    }
-
-    response.send(Http::Code::Ok, "Wanted settings saved\n");
+    logActivity(msg);
+    response.send(Http::Code::Ok, msg);
 }
 
 void getWantedValues(const Rest::Request& request, Http::ResponseWriter response) {
     auto option = request.param(":option").as<string>();
-    if(option.compare("temperature") != 0 && option.compare("humidity") != 0 && option.compare("light") != 0) {
-        response.send(Http::Code::Not_Found, "Option poate avea doar valorile temperature, humidity sau light.\n");
+
+    string msg;
+
+    if(option.compare("temperature") != 0 && option.compare("humidity") != 0 && option.compare("light") != 0 && option.compare("alarm") != 0) {
+        msg = "Gresit! Option poate avea doar valorile temperature, humidity, light sau alarm.\n";
+        logActivity(msg);
+        response.send(Http::Code::Not_Found, msg);
         return;
     }
 
     if(option.compare("temperature") == 0) {
-        response.send(Http::Code::Ok, "Wanted " + option + " = " + to_string(wantedTemp) + "\n");
+        msg = "Temperatura dorita este: " + to_string(wantedTemp) + "\n";
     }
     if(option.compare("humidity") == 0) {
-        response.send(Http::Code::Ok, "Wanted " + option + " = " + to_string(wantedHumidity) + "\n");
+        msg = "Umiditatea dorita este: " + to_string(wantedHumidity) + "\n";
     }
     if(option.compare("light") == 0) {
-        response.send(Http::Code::Ok, "Wanted " + option + " = " + to_string(wantedLight) + "\n");
+        msg = "Luminozitatea dorita este: " + to_string(wantedLight) + "\n";
     }
+    if(option.compare("alarm") == 0) {
+        msg = "Alarma de trezire a fost setata la ora: " + to_string(wantedHour) + ":" + to_string(wantedMinute) + "\n";
+    }
+
+    logActivity(msg);
+    response.send(Http::Code::Ok, msg);
 }
 
 void giveCommand()
 {
+    string msg;
+
     if((humInside < wantedHumidity) && (humOutside >= wantedHumidity)){
         windowOpenness += 50;
-        logActivity("A fost deschisa fereastra cu 50 de procente.\n");
+        msg = "A fost deschisa fereastra cu 50 de procente.\n";
     }
     if((humInside > wantedHumidity) && (humOutside <= wantedHumidity)){
         windowOpenness += 50;
-        logActivity("A fost deschisa fereastra cu 50 de procente.\n");
+        msg = "A fost deschisa fereastra cu 50 de procente.\n";
     }
     if((tempInside < wantedTemp) && (tempOutside >= wantedTemp)){
         windowOpenness += 50;
-        logActivity("A fost deschisa fereastra cu 50 de procente.\n");
+        msg = "A fost deschisa fereastra cu 50 de procente.\n";
     }
     if((tempInside > wantedTemp) && (tempOutside <= wantedTemp)){
         windowOpenness += 50;
-        logActivity("A fost deschisa fereastra cu 50 de procente.\n");
+        msg = "A fost deschisa fereastra cu 50 de procente.\n";
     }
 
 
     if((humInside < wantedHumidity) && (humOutside < wantedHumidity)){
         windowOpenness = 0;
-        logActivity("A fost inchisa fereastra.\n");
+        msg = "A fost inchisa fereastra.\n";
     }
     if((humInside > wantedHumidity) && (humOutside > wantedHumidity)){
         windowOpenness = 0;
-        logActivity("A fost inchisa fereastra.\n");
+        msg = "A fost inchisa fereastra.\n";
     }
 
     if((tempInside < wantedTemp) && (tempOutside < wantedTemp)){
         windowOpenness = 0;
-        logActivity("A fost inchisa fereastra.\n");
+        msg = "A fost inchisa fereastra.\n";
     }
     if((tempInside > wantedTemp) && (tempOutside > wantedTemp)){
         windowOpenness = 0;
-        logActivity("A fost inchisa fereastra.\n");
+        msg = "A fost inchisa fereastra.\n";
     }
 
     if((lightInside < wantedLight) && (lightOutside >= wantedLight)){
         curtainOpenness = 100;
-        logActivity("A fost deschisa perdeaua.\n");
+        msg = "A fost deschisa perdeaua.\n";
     }
     if(lightInside > wantedLight){
         curtainOpenness -= 75;
-        logActivity("A fost inchisa perdeaua cu 75 de procente.\n");
+        msg = "A fost inchisa perdeaua cu 75 de procente.\n";
     }
+
+    if(wakeUpAlarm == true){
+        if(curHour >= wantedHour){
+            if(curMinute >= wantedMinute){
+                curtainOpenness = 100;
+                wakeUpAlarm = false;
+                msg = "A fost deschisa perdeaua ca alarma de dimineata.\n";
+            }
+        }
+    }
+
     if(windowOpenness > 100)
         windowOpenness = 100;
     if(curtainOpenness < 0)
         curtainOpenness = 0;
 
     if(stressLevel > 5){
-        turnOnAlarm = true;
-        logActivity("A pornit alarma!\n");
+        turnOnSecurityAlarm = true;
+        msg = "A pornit alarma!\n";
     }
 
+    logActivity(msg);
 }
 
 void mqttExample() {
@@ -387,14 +448,13 @@ int main() {
     router.get("/sensor/set/:location/:option/:value", Routes::bind(setSensorValue));
     router.get("/sensor/get/:location/:option", Routes::bind(getSensorValue));
 
-    // Rute pentru setarea si returnarea valorilor dorite in interiorul camerei
-    router.get("/wantedValues/set/:option/:value", Routes::bind(setWantedValues));
-    router.get("/wantedValues/get/:option", Routes::bind(getWantedValues));
-
-
     // Rute pentru setarea si returnarea valorilor pozitiei ferestrei/perdelei
     router.get("/settings/set/:action/:object/:value", Routes::bind(setStateObject));
     router.get("/settings/get/:object", Routes::bind(getStateObject));
+
+    // Rute pentru setarea si returnarea valorilor dorite in interiorul camerei
+    router.get("/wantedValues/set/:option/:value", Routes::bind(setWantedValues));
+    router.get("/wantedValues/get/:option", Routes::bind(getWantedValues));
 
     Address addr(Ipv4::any(), Port(9080));
 
