@@ -13,7 +13,7 @@
                 "description":"Parameters for opening/closing and turning off",
                 "token-type":"string", 
                 "byte-size":10, 
-                "regex-rule": "[a-zA-Z]*",
+                "regex-rule": "[a-zA-Z]*", // Correct inputs will be: [open, close, turn off]
                 "optional": false
             },
             {
@@ -21,7 +21,7 @@
                 "description": "Parameters representing which part of the window are the actions applied to.",
                 "token-type":"string",
                 "byte-size":10,
-                "regex-rule": "[a-zA-Z]*", 
+                "regex-rule": "[a-zA-Z]*", // Correct inputs will be: [window, curtain, net, alarm]
                 "optional": false
             },
             {
@@ -29,13 +29,25 @@
                 "description": "Parameter value for the setting chosen",
                 "token-type":"string",
                 "byte-size":10,
-                "regex-rule": "[0-9]*",
+                "regex-rule": "[0-9]*", // Correct inputs will be: [1, 2...]
                 "optional": false
             }
             ]
         },
         "2":{
-            
+            "token-delimitators": "",
+            "protocol": "HTTP",
+            "prefix": "curl -XGET 'http://127.0.0.1:8080/'",
+            "buffer-tokens":[
+            {
+                "name":"App objects",
+                "description": "Parameters representing which part of the window are the actions applied to.",
+                "token-type":"string",
+                "byte-size":10,
+                "regex-rule": "[a-zA-Z]*", // Correct inputs will be: [window, curtain, net, alarm]
+                "optional": false
+            }
+            ]
         }
     }
 }
