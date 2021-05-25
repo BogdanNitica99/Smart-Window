@@ -1,0 +1,15 @@
+{
+  "inside": {
+    "temperature": 20,
+    "humidity": 35,
+    "light": 120
+  },
+  "outside": {
+    "temperature": 27,
+    "humidity": 42,
+    "light": 260
+  },
+  "hour": 13,
+  "minute": 44,
+  "stressLevel": 2
+}

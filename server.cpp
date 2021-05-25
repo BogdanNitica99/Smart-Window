@@ -4,13 +4,19 @@
 #include <pistache/router.h>
 #include <fstream>
 #include <mqtt/client.h>
+#include <iostream>
+#include <nlohmann/json.hpp>
 
 using namespace std;
 using namespace Pistache;
 using namespace Pistache::Rest;
 
+using json = nlohmann::json;
+
+// sensor values
 int tempInside, tempOutside, humInside, humOutside, lightInside, lightOutside, stressLevel, curHour, curMinute;
-int windowOpenness = 0, curtainOpenness = 100, netOpenness = 0, wantedTemp = 19, wantedHumidity = 40, wantedLight = 7500, wantedHour, wantedMinute;
+// user values
+int windowOpenness = 0, curtainOpenness = 100, netOpenness = 0, wantedTemp, wantedHumidity, wantedLight, wantedHour, wantedMinute;
 bool turnOnSecurityAlarm, wakeUpAlarm;
 
 void logActivity(string msg){
@@ -32,61 +38,143 @@ void testRoute(const Rest::Request& request, Http::ResponseWriter response) {
     response.send(Http::Code::Ok, "Test Route Ok!\n");
 } 
 
+void giveCommand() {
+    string msg;
+
+    if((humInside < wantedHumidity) && (humOutside >= wantedHumidity)) {
+        windowOpenness += 50;
+        msg = "A fost deschisa fereastra cu 50 de procente.\n";
+    }
+    if((humInside > wantedHumidity) && (humOutside <= wantedHumidity)) {
+        windowOpenness += 50;
+        msg = "A fost deschisa fereastra cu 50 de procente.\n";
+    }
+    if((tempInside < wantedTemp) && (tempOutside >= wantedTemp)) {
+        windowOpenness += 50;
+        msg = "A fost deschisa fereastra cu 50 de procente.\n";
+    }
+    if((tempInside > wantedTemp) && (tempOutside <= wantedTemp)) {
+        windowOpenness += 50;
+        msg = "A fost deschisa fereastra cu 50 de procente.\n";
+    }
+
+
+    if((humInside < wantedHumidity) && (humOutside < wantedHumidity)) {
+        windowOpenness = 0;
+        msg = "A fost inchisa fereastra.\n";
+    }
+    if((humInside > wantedHumidity) && (humOutside > wantedHumidity)) {
+        windowOpenness = 0;
+        msg = "A fost inchisa fereastra.\n";
+    }
+
+    if((tempInside < wantedTemp) && (tempOutside < wantedTemp)) {
+        windowOpenness = 0;
+        msg = "A fost inchisa fereastra.\n";
+    }
+    if((tempInside > wantedTemp) && (tempOutside > wantedTemp)) {
+        windowOpenness = 0;
+        msg = "A fost inchisa fereastra.\n";
+    }
+
+    if((lightInside < wantedLight) && (lightOutside >= wantedLight)) {
+        curtainOpenness = 100;
+        msg = "A fost deschisa perdeaua.\n";
+    }
+    if(lightInside > wantedLight) {
+        curtainOpenness -= 75;
+        msg = "A fost inchisa perdeaua cu 75 de procente.\n";
+    }
+
+    if(wakeUpAlarm == true) {
+        if(curHour >= wantedHour) {
+            if(curMinute >= wantedMinute) {
+                curtainOpenness = 100;
+                wakeUpAlarm = false;
+                msg = "A fost deschisa perdeaua ca alarma de dimineata.\n";
+            }
+        }
+    }
+
+    if(windowOpenness > 100)
+        windowOpenness = 100;
+    if(curtainOpenness < 0)
+        curtainOpenness = 0;
+
+    if(stressLevel > 5){
+        turnOnSecurityAlarm = true;
+        msg = "A pornit alarma!\n";
+    }
+
+    logActivity(msg);
+}
+
+void mqttPublish(const string topic, const string payload) {
+    const string address = "localhost";
+    const string clientId = "sensor";
+
+    // Create a client
+    mqtt::client client(address, clientId);
+
+    mqtt::connect_options options;
+    options.set_keep_alive_interval(20);
+    options.set_clean_session(true);
+
+    try {
+        // Connect to the client
+        client.connect(options);
+
+        // Create a message
+        auto msg = mqtt::make_message(topic, payload);
+
+        // Publish it to the server
+        client.publish(msg);
+
+        // Disconnect
+        client.disconnect();
+    }
+    catch (const mqtt::exception& exc) {
+        cerr << exc.what() << " [" << exc.get_reason_code() << "]" << endl;
+    }
+}
+
 // Sensor Settings
 
-void setSensorValue(const Rest::Request& request, Http::ResponseWriter response) {
-    auto location = request.param(":location").as<std::string>();
-    auto option = request.param(":option").as<std::string>();
-    auto value = request.param(":value").as<std::string>();
- 
-    if(location.compare("outside") != 0 && location.compare("inside") != 0) {
-        response.send(Http::Code::Not_Found, "Location poate avea doar valorile outside sau inside.\n");
-        return;
-    }
-    if(option.compare("temperature") != 0 && option.compare("humidity") != 0 && option.compare("light") != 0
-    && option.compare("alarm") != 0) {
-        response.send(Http::Code::Not_Found, "Option poate avea doar valorile temperature, humidity sau light.\n");
-        return;
-    }
-    if(!is_digits(value)) {
-        response.send(Http::Code::Not_Found, "Value poate fi doar un numar intreg.\n");
-        return;
-    }
+// Citit din fisier JSON, numele fisierului trimis prin HTTP
+// http://localhost:9080/sensor/set/sensorValues.json
+void setSensorValueJson(const Rest::Request& request, Http::ResponseWriter response) {
+    auto filename = request.param(":filename").as<std::string>();
 
-    if(location.compare("inside") == 0) {
-        if(option.compare("temperature") == 0) {
-            tempInside = stoi(value);
-        }
-        if(option.compare("humidity") == 0) {
-            humInside = stoi(value);
-        }
-        if(option.compare("light") == 0) {
-            lightInside = stoi(value);
-        }
-    }
-    if(location.compare("outside") == 0) {
-        if(option.compare("temperature") == 0) {
-            tempOutside = stoi(value);
-        }
-        if(option.compare("humidity") == 0) {
-            humOutside = stoi(value);
-        }
-        if(option.compare("light") == 0) {
-            lightOutside = stoi(value);
-        }
-        if(option.compare("alarm") == 0) {
-            stressLevel = stoi(value);
-        }
-    }
+    std::ifstream sensorParams(filename, std::ifstream::binary);
+    json params;
+    sensorParams >> params;
 
+    tempInside = params["inside"]["temperature"];
+    tempOutside = params["outside"]["temperature"];
+
+    humInside = params["inside"]["humidity"];
+    humOutside = params["outside"]["humidity"];
+
+    lightInside = params["inside"]["light"];
+    lightOutside = params["outside"]["light"];
+
+    curHour = params["hour"];
+    curMinute = params["minute"];
+
+    stressLevel = params["stressLevel"];
+
+    giveCommand();
     response.send(Http::Code::Ok, "Sensor settings saved\n");
 }
 
+// Trimis prin MQTT publish
+// http://localhost:9080/sensor/get/:location/:option
 void getSensorValue(const Rest::Request& request, Http::ResponseWriter response) {
     auto location = request.param(":location").as<std::string>();
     auto option = request.param(":option").as<std::string>();
 
-    string msgToReturn = location + " + " + option + " = ";
+    string msg;
+    string topic;
  
     if(location.compare("outside") != 0 && location.compare("inside") != 0) {
         response.send(Http::Code::Not_Found, "Location poate avea doar valorile outside sau inside.\n");
@@ -97,35 +185,45 @@ void getSensorValue(const Rest::Request& request, Http::ResponseWriter response)
         return;
     }
 
+    msg = location + " + " + option + " = ";
+
+
     if(location.compare("inside") == 0) {
         if(option.compare("temperature") == 0) {
-            msgToReturn += to_string(tempInside);
+            msg += to_string(tempInside);
+            topic = "insideTemperature";
         }
         if(option.compare("humidity") == 0) {
-            msgToReturn += to_string(humInside);
+            msg += to_string(humInside);
+            topic = "insideHumidity";
         }
         if(option.compare("light") == 0) {
-            msgToReturn += to_string(lightInside);
+            msg += to_string(lightInside);
+            topic = "insideLight";
         }
     }
     
     if(location.compare("outside") == 0) {
         if(option.compare("temperature") == 0) {
-            msgToReturn += to_string(tempOutside);
+            msg += to_string(tempOutside);
+            topic = "outsideTemperature";
         }
         if(option.compare("humidity") == 0) {
-            msgToReturn += to_string(humOutside);
+            msg += to_string(humOutside);
+            topic = "outsideHumidity";
         }
         if(option.compare("light") == 0) {
-            msgToReturn += to_string(lightOutside);
+            msg += to_string(lightOutside);
+            topic = "outsideLight";
         }
     }
 
-    response.send(Http::Code::Ok, msgToReturn + "\n");
+    mqttPublish(topic, msg);
 }
 
 // User Settings
 
+// http://localhost:9080/settings/set/:action/:object/:value
 void setStateObject(const Rest::Request& request, Http::ResponseWriter response) {
     auto action = request.param(":action").as<std::string>();
     auto object = request.param(":object").as<std::string>();
@@ -134,7 +232,7 @@ void setStateObject(const Rest::Request& request, Http::ResponseWriter response)
     string msg;
 
 
-    if(action.compare("open") != 0 && action.compare("close") != 0 && action.compare("turn off") != 0) {
+    if(action.compare("open") != 0 && action.compare("close") != 0 && action.compare("turnOff") != 0) {
         msg = "Gresit! Poti doar sa deschizi/inchizi fereastra/perdeaua/plasa sau sa opresti alarma.\n";
         logActivity(msg);
         response.send(Http::Code::Not_Found, msg);
@@ -185,7 +283,7 @@ void setStateObject(const Rest::Request& request, Http::ResponseWriter response)
         }
     }
     if(object.compare("alarm") == 0) {
-        if(action.compare("turn off") == 0) {
+        if(action.compare("turnOff") == 0) {
             if(stoi(value) == 0){
                 turnOnSecurityAlarm = false;
                 msg = "Ok! Ati oprit alarma.\n";
@@ -214,6 +312,7 @@ void setStateObject(const Rest::Request& request, Http::ResponseWriter response)
     response.send(Http::Code::Ok, msg);
 }
 
+// http://localhost:9080/settings/get/:object
 void getStateObject(const Rest::Request& request, Http::ResponseWriter response) {
     auto object = request.param(":object").as<std::string>();
 
@@ -257,11 +356,21 @@ void getStateObject(const Rest::Request& request, Http::ResponseWriter response)
     response.send(Http::Code::Ok, msg);
 }
 
-// Setarea valorilor pentru geam
+// Setarea valorilor dorite
 
+// Setarea valorilor dorite prin JSON direct din cURL
+// curl --header "Content-Type: application/json"   
+//      --request POST   
+//      --data '{"option":"temperature/humidity/light/alarm","value":"[0-9]* | ([0-9]{2}):([0-9]{2})"}'   
+//      http://localhost:9080/wantedValues/set
 void setWantedValues(const Rest::Request& request, Http::ResponseWriter response) {
-    auto option = request.param(":option").as<std::string>();
-    auto value = request.param(":value").as<std::string>();
+    const auto params = json::parse(request.body());
+
+    auto option = to_string(params["option"]);
+    option = option.substr(1,option.length()-2);
+
+    auto value = to_string(params["value"]);
+    value = value.substr(1,value.length()-2);
 
     string msg;
 
@@ -301,14 +410,20 @@ void setWantedValues(const Rest::Request& request, Http::ResponseWriter response
         return;
     }
 
+    giveCommand();
     logActivity(msg);
     response.send(Http::Code::Ok, msg);
 }
 
+// Returnarea valorilor dorite
+
+// Returnarea valorilor dorite prin JSON direct din cURL
+// http://localhost:9080/wantedValues/get/:option
 void getWantedValues(const Rest::Request& request, Http::ResponseWriter response) {
     auto option = request.param(":option").as<string>();
 
     string msg;
+    json j;
 
     if(option.compare("temperature") != 0 && option.compare("humidity") != 0 && option.compare("light") != 0 && option.compare("alarm") != 0) {
         msg = "Gresit! Option poate avea doar valorile temperature, humidity, light sau alarm.\n";
@@ -318,143 +433,43 @@ void getWantedValues(const Rest::Request& request, Http::ResponseWriter response
     }
 
     if(option.compare("temperature") == 0) {
+        j["temperature"] = to_string(wantedTemp);
         msg = "Temperatura dorita este: " + to_string(wantedTemp) + "\n";
     }
     if(option.compare("humidity") == 0) {
+        j["humidity"] = to_string(wantedHumidity);
         msg = "Umiditatea dorita este: " + to_string(wantedHumidity) + "\n";
     }
     if(option.compare("light") == 0) {
+        j["light"] = to_string(wantedLight);
         msg = "Luminozitatea dorita este: " + to_string(wantedLight) + "\n";
     }
     if(option.compare("alarm") == 0) {
+        j["alarm"] = to_string(wantedHour) + ":" + to_string(wantedMinute);
         msg = "Alarma de trezire a fost setata la ora: " + to_string(wantedHour) + ":" + to_string(wantedMinute) + "\n";
     }
 
     logActivity(msg);
-    response.send(Http::Code::Ok, msg);
-}
-
-void giveCommand()
-{
-    string msg;
-
-    if((humInside < wantedHumidity) && (humOutside >= wantedHumidity)){
-        windowOpenness += 50;
-        msg = "A fost deschisa fereastra cu 50 de procente.\n";
-    }
-    if((humInside > wantedHumidity) && (humOutside <= wantedHumidity)){
-        windowOpenness += 50;
-        msg = "A fost deschisa fereastra cu 50 de procente.\n";
-    }
-    if((tempInside < wantedTemp) && (tempOutside >= wantedTemp)){
-        windowOpenness += 50;
-        msg = "A fost deschisa fereastra cu 50 de procente.\n";
-    }
-    if((tempInside > wantedTemp) && (tempOutside <= wantedTemp)){
-        windowOpenness += 50;
-        msg = "A fost deschisa fereastra cu 50 de procente.\n";
-    }
-
-
-    if((humInside < wantedHumidity) && (humOutside < wantedHumidity)){
-        windowOpenness = 0;
-        msg = "A fost inchisa fereastra.\n";
-    }
-    if((humInside > wantedHumidity) && (humOutside > wantedHumidity)){
-        windowOpenness = 0;
-        msg = "A fost inchisa fereastra.\n";
-    }
-
-    if((tempInside < wantedTemp) && (tempOutside < wantedTemp)){
-        windowOpenness = 0;
-        msg = "A fost inchisa fereastra.\n";
-    }
-    if((tempInside > wantedTemp) && (tempOutside > wantedTemp)){
-        windowOpenness = 0;
-        msg = "A fost inchisa fereastra.\n";
-    }
-
-    if((lightInside < wantedLight) && (lightOutside >= wantedLight)){
-        curtainOpenness = 100;
-        msg = "A fost deschisa perdeaua.\n";
-    }
-    if(lightInside > wantedLight){
-        curtainOpenness -= 75;
-        msg = "A fost inchisa perdeaua cu 75 de procente.\n";
-    }
-
-    if(wakeUpAlarm == true){
-        if(curHour >= wantedHour){
-            if(curMinute >= wantedMinute){
-                curtainOpenness = 100;
-                wakeUpAlarm = false;
-                msg = "A fost deschisa perdeaua ca alarma de dimineata.\n";
-            }
-        }
-    }
-
-    if(windowOpenness > 100)
-        windowOpenness = 100;
-    if(curtainOpenness < 0)
-        curtainOpenness = 0;
-
-    if(stressLevel > 5){
-        turnOnSecurityAlarm = true;
-        msg = "A pornit alarma!\n";
-    }
-
-    logActivity(msg);
-}
-
-void mqttExample() {
-    const std::string address = "localhost";
-    const std::string clientId = "window";
-
-    // Create a client
-    mqtt::client client(address, clientId);
-
-    mqtt::connect_options options;
-    options.set_keep_alive_interval(20);
-    options.set_clean_session(true);
-
-    try {
-        // Connect to the client
-        client.connect(options);
-
-        // Create a message
-        const std::string TOPIC = "window";
-        const std::string PAYLOAD = "Hello World!";
-        auto msg = mqtt::make_message(TOPIC, PAYLOAD);
-
-        // Publish it to the server
-        client.publish(msg);
-
-        // Disconnect
-        client.disconnect();
-    }
-    catch (const mqtt::exception& exc) {
-        std::cerr << exc.what() << " [" << exc.get_reason_code() << "]" << std::endl;
-    }
+    response.send(Http::Code::Ok, j.dump());
 }
 
 int main() {
-    mqttExample();
     Router router;
 
     // Ruta de test pentru libraria Pistache
     router.get("/test", Routes::bind(testRoute));
 
     // Rute pentru setarea si returnarea valorilor senzorilor din interior si exterior
-    router.get("/sensor/set/:location/:option/:value", Routes::bind(setSensorValue));
-    router.get("/sensor/get/:location/:option", Routes::bind(getSensorValue));
+    router.get("/sensor/set/:filename", Routes::bind(setSensorValueJson)); // din fisier JSON
+    router.get("/sensor/get/:location/:option", Routes::bind(getSensorValue)); // publish to MQTT
 
     // Rute pentru setarea si returnarea valorilor pozitiei ferestrei/perdelei
     router.get("/settings/set/:action/:object/:value", Routes::bind(setStateObject));
     router.get("/settings/get/:object", Routes::bind(getStateObject));
 
     // Rute pentru setarea si returnarea valorilor dorite in interiorul camerei
-    router.get("/wantedValues/set/:option/:value", Routes::bind(setWantedValues));
-    router.get("/wantedValues/get/:option", Routes::bind(getWantedValues));
+    router.post("/wantedValues/set", Routes::bind(setWantedValues)); // direct din JSON
+    router.get("/wantedValues/get/:option", Routes::bind(getWantedValues)); // JSON.dump
 
     Address addr(Ipv4::any(), Port(9080));
 

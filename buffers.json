@@ -1,41 +1,123 @@
 {
-    "device-name": "Window App",
-    "device-type": "Window",
-    "buffers-count": 2,
-    "input-buffers":{
-        "1":{
-            "token-delimitators": "",
-            "protocol": "HTTP",
-            "prefix": "curl -XPOST 'http://127.0.0.1:8080/'",
-            "buffer-tokens":[
-            {
-                "name":"App actions",
-                "description":"Parameters for opening/closing and turning off",
-                "token-type":"string", 
-                "byte-size":10, 
-                "regex-rule": "[a-zA-Z]*",
-                "optional": false
-            },
-            {
-                "name":"App objects",
-                "description": "Parameters representing which part of the window are the actions applied to.",
-                "token-type":"string",
-                "byte-size":10,
-                "regex-rule": "[a-zA-Z]*", 
-                "optional": false
-            },
-            {
-                "name":"App action parameter value",
-                "description": "Parameter value for the setting chosen",
-                "token-type":"string",
-                "byte-size":10,
-                "regex-rule": "[0-9]*",
-                "optional": false
-            }
-            ]
-        },
-        "2":{
-            
+  "device-name": "Window App",
+  "device-type": "Window",
+  "buffers-count": 6,
+  "input-buffers": {
+    "1": {
+      "token-delimitators": "",
+      "protocol": "HTTP",
+      "prefix": "curl -XGET 'http://localhost:9080/sensor/set'",
+      "buffer-tokens": [
+        {
+          "name": "Filename",
+          "description": "Filename to read the sensor data",
+          "token-type": "string",
+          "byte-size": 128,
+          "regex-rule": "[a-zA-Z0-9-_]*.json", // Correct inputs will be: sensorValues.json
+          "optional": false
         }
+      ]
+    },
+    "2": {
+      "token-delimitators": "",
+      "protocol": "HTTP",
+      "prefix": "curl -XGET 'http://localhost:9080/settings/set'",
+      "buffer-tokens": [
+        {
+          "name": "App actions",
+          "description": "Parameters for opening/closing and turning off",
+          "token-type": "string",
+          "byte-size": 10,
+          "regex-rule": "open|close|turnOff",
+          "optional": false
+        },
+        {
+          "name": "App objects",
+          "description": "Parameters representing which part of the window are the actions applied to",
+          "token-type": "string",
+          "byte-size": 10,
+          "regex-rule": "window|curtain|net|alarm",
+          "optional": false
+        },
+        {
+          "name": "App action parameter value",
+          "description": "Parameter value for the setting chosen",
+          "token-type": "string",
+          "byte-size": 10,
+          "regex-rule": "[0-9]*", // Correct inputs will be any integer
+          "optional": false
+        }
+      ]
+    },
+    "3": {
+      "token-delimitators": "",
+      "protocol": "HTTP",
+      "prefix": "curl -XPOST 'http://localhost:9080/wantedValues/set'",
+      "buffer-tokens": [
+        {
+          "name": "Option",
+          "description": "Set a wanted option",
+          "token-type": "string",
+          "byte-size": 256,
+          "regex-rule": "{\"option\":(\"temperature\"|\"humidity\"|\"light\"|\"alarm\"),\"value\":(\"[0-9]+\"|\"([0-9]{2}):([0-9]{2})\")}", // Correct input will be: {"option":"temperature","value":"24"}
+          "optional": false
+        }
+      ]
     }
+  },
+  "output-buffers": {
+    "1": {
+      "token-delimitators": "",
+      "protocol": "HTTP",
+      "prefix": "curl -XGET 'http://localhost:9080/sensor/get'",
+      "buffer-tokens": [
+        {
+          "name": "Location",
+          "description": "Select the location of the sensor",
+          "token-type": "string",
+          "byte-size": 10,
+          "regex-rule": "inside|outside",
+          "optional": false
+        },
+        {
+          "name": "Option",
+          "description": "Which sensor you want to check",
+          "token-type": "string",
+          "byte-size": 10,
+          "regex-rule": "temperature|humidity|light",
+          "optional": false
+        }
+      ]
+    },
+    "2": {
+      "token-delimitators": "",
+      "protocol": "HTTP",
+      "prefix": "curl -XGET 'http://localhost:9080/settings/get'",
+      "buffer-tokens": [
+        {
+          "name": "App objects",
+          "description": "Which object you want to see it's status",
+          "token-type": "string",
+          "byte-size": 10,
+          "regex-rule": "window|curtain|net",
+          "optional": false
+        }
+      ]
+    },
+    "3": {
+      "token-delimitators": "",
+      "protocol": "HTTP",
+      "prefix": "curl -XGET 'http://localhost:9080/wantedValues/get'",
+      "buffer-tokens": [
+        {
+          "name": "Option",
+          "description": "Get the value for a wanted option",
+          "token-type": "string",
+          "byte-size": 10,
+          "regex-rule": "temperature|humidity|light|alarm",
+          "optional": false
+        }
+      ]
+    }
+  }
 }
